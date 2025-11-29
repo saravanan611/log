@@ -12,7 +12,7 @@ import (
 )
 
 type ownStr string
-
+/* -----------------------Sid Key Name------------------- */
 const GateKey ownStr = "G-key"
 
 /* ----------------------- log session------------------- */
