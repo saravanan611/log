@@ -11,8 +11,8 @@ import (
 	"github.com/google/uuid"
 )
 
-type ownStr string
 /* -----------------------Sid Key Name------------------- */
+type ownStr string
 const GateKey ownStr = "G-key"
 
 /* ----------------------- log session------------------- */
