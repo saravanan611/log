@@ -13,7 +13,7 @@ import (
 
 /* -----------------------Sid Key Name------------------- */
 type ownStr string
-const GateKey ownStr = "G-key"
+const GateKey ownStr = "G-key" 
 
 /* ----------------------- log session------------------- */
 type LogStruct struct {
