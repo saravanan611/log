@@ -3,23 +3,24 @@ package log
 import (
 	"fmt"
 	"log"
-	"net/http"
 	"os"
 	"runtime"
+	"strconv"
 	"strings"
-
-	"github.com/google/uuid"
+	"sync"
 )
 
-/* -----------------------Sid Key Name------------------- */
-type ownStr string
-const GateKey ownStr = "G-key" 
-
-/* ----------------------- log session------------------- */
-type LogStruct struct {
-	Uid       string
-	lInfoFlag bool
-}
+// ==================================================
+// Global map to store requestID for each goroutine
+// ==================================================
+var (
+	GEnvLogVal    bool
+	gRequestIDMap = sync.Map{}
+	gInfo         = log.New(os.Stdout, "INFO: ", log.LstdFlags|log.Lshortfile)
+	gDebug        = log.New(os.Stdout, "DEBUG: ", log.LstdFlags|log.Lshortfile)
+	gErr          = log.New(os.Stderr, "ERROR: ", log.LstdFlags|log.Lshortfile)
+	gOwnErr       = log.New(os.Stderr, "ERROR: ", log.LstdFlags)
+)
 
 /* -----------------------custom error ------------------- */
 type ownErr struct {
@@ -32,51 +33,9 @@ func (pErr *ownErr) Error() string {
 	return pErr.lErr
 }
 
-/* --------------------Log Ination ---------------- */
-func Init() *LogStruct {
-	return &LogStruct{
-		Uid:       strings.ReplaceAll(uuid.New().String(), "-", ""),
-		lInfoFlag: strings.EqualFold(os.Getenv("InfoFlog"), "Y"),
-	}
-}
-
-/*-----------------------------read req id -----------------------  */
-
-func ReqInit(pReq *http.Request) *LogStruct {
-	lUid, lOk := pReq.Context().Value(GateKey).(string)
-	if !lOk || lUid == "" {
-		lUid = strings.ReplaceAll(uuid.New().String(), "-", "")
-	}
-	return &LogStruct{
-		Uid:       lUid,
-		lInfoFlag: strings.EqualFold(os.Getenv("InfoFlog"), "Y"),
-	}
-}
-
-/* --------------------Basic log variable ---------------- */
-var (
-	err    = log.New(os.Stderr, "ERROR: ", log.LstdFlags|log.Lshortfile)
-	info   = log.New(os.Stdout, "INFO: ", log.LstdFlags|log.Lshortfile)
-	lOnErr = log.New(os.Stdout, "ERROR: ", log.LstdFlags)
-)
-
-// ---------- INFO LOGGER ----------
-func (lId *LogStruct) Info(pMsg ...any) {
-	if !lId.lInfoFlag {
-		return
-	}
-	msg := fmt.Sprint(pMsg...) // cleaner than fmt.Sprintf("%v")
-	info.Output(2, fmt.Sprintf("[%s] %s", lId.Uid, msg))
-}
-
-// ---------- ERROR LOGGER ----------
-func (lId *LogStruct) Err(pErr any) {
-	if lErr, lok := pErr.(*ownErr); lok {
-		lOnErr.Printf("%s [%s] %s", lErr.lFileInfo, lId.Uid, lErr.Error())
-		return
-	}
-	// use Output(counter+2, ...) so call depth aligns properly
-	err.Output(2, fmt.Sprintf("[%s] %v", lId.Uid, pErr))
+/* ---------------- enable info and debug log -------------- */
+func EnableInfo() {
+	GEnvLogVal = true
 }
 
 // ---------- ERROR WRAPPER ----------
@@ -91,4 +50,71 @@ func Error(pErr any) error {
 	lFilename := lStrArray[len(lStrArray)-2] + "/" + lStrArray[len(lStrArray)-1]
 	return &ownErr{lFileInfo: fmt.Sprintf("%s:%d", lFilename, lLine), lErr: fmt.Sprintf("%v", pErr)}
 
+}
+
+// ============================================
+// Logging functions - NO PARAMETERS NEEDED!
+// ============================================
+
+// ---------- INFO LOGGER ----------
+func Info(format string, args ...any) {
+	if !GEnvLogVal {
+		return
+	}
+	requestID := GetRequestID()
+	msg := fmt.Sprintf(format, args...)
+	gInfo.Output(2, fmt.Sprintf("[ReqID: %s] %s", requestID, msg))
+}
+
+// ---------- Debug LOGGER ----------
+func Debug(format string, args ...any) {
+	if !GEnvLogVal {
+		return
+	}
+	requestID := GetRequestID()
+	msg := fmt.Sprintf(format, args...)
+	gDebug.Output(2, fmt.Sprintf("[ReqID: %s] %s", requestID, msg))
+}
+
+// ---------- Err LOGGER ----------
+func Err(pErr any) {
+	requestID := GetRequestID()
+	if lErr, lok := pErr.(*ownErr); lok {
+		gOwnErr.Printf("%s [ReqID: %s] %s", lErr.lFileInfo, requestID, lErr.Error())
+		return
+	}
+	// use Output(counter+2, ...) so call depth aligns properly
+	gErr.Output(2, fmt.Sprintf("[ReqID: %s] %v", requestID, pErr))
+}
+
+// Get current goroutine ID
+func getGoroutineID() uint64 {
+	b := make([]byte, 64)
+	b = b[:runtime.Stack(b, false)]
+	b = b[len("goroutine "):]
+	b = b[:strings.IndexByte(string(b), ' ')]
+	n, _ := strconv.ParseUint(string(b), 10, 64)
+	return n
+}
+
+// Set request ID for current goroutine
+func SetRequestID(requestID string) {
+	gid := getGoroutineID()
+	gRequestIDMap.Store(gid, requestID)
+}
+
+// Get request ID for current goroutine
+func GetRequestID() string {
+	gid := getGoroutineID()
+	// log.Println("gid :", gid)
+	if id, ok := gRequestIDMap.Load(gid); ok {
+		return id.(string)
+	}
+	return "UNKNOWN"
+}
+
+// Clear request ID when done
+func ClearRequestID() {
+	gid := getGoroutineID()
+	gRequestIDMap.Delete(gid)
 }

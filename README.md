@@ -1,171 +1,167 @@
+# 🪵 `log` — Reference Documentation
 
-# 🪵 `log` — Custom Logging & Error Wrapping for Go
-
-This package provides a **lightweight logging and error tracking system** with:
-
-* Unique session IDs for each log instance
-* Optional info logs (configurable via env var)
-* Automatic file and line number tagging for errors
-* Structured output for easy tracing
+A minimal, goroutine-aware logging and error wrapping package for Go.
 
 ---
 
-## 📦 Installation
-
-Simply include it in your Go project (as a local package or module import):
+## 📦 Import
 
 ```go
-import "github.com/saravanan611/log"
+import "your-module/log"
 ```
 
 ---
 
-## ⚙️ Initialization
+## ⚙️ Configuration
 
-Before logging, initialize a log session using:
+### Enable Info & Debug Logs
 
 ```go
-l := log.Init()
+log.EnableInfo()
 ```
 
-Each logger instance (`l`) will have its own **unique UID**, shown in every log line.
-You can enable or disable info logs using an environment variable:
-
-```bash
-export InfoFlog=Y   # Enable info logs
-# or
-export InfoFlog=N   # Disable info logs
-```
+* By default, **info/debug logs are disabled**
+* Calling `EnableInfo()` enables both
 
 ---
 
-## 🧠 How It Works
+## 🔑 Request ID Management
 
-* **Info logs** are only printed when `InfoFlog=Y`.
-* **Error logs** always print to `stderr`.
-* Each log line includes:
-
-  * A prefix (`INFO:` or `ERROR:`)
-  * Date/time
-  * Filename and line number
-  * Session UID (unique per Init)
-* You can wrap errors using `log.Return(err)` to automatically add file and line metadata.
-
----
-
-## 🧩 Example Usage
-
-### ✅ Basic Info and Error Logs
+### Set Request ID (per goroutine)
 
 ```go
-package main
-
-import (
-	"errors"
-	"github.com/saravanan611/log"
-)
-
-func main() {
-	l := log.Init()
-
-	l.Info("Application started successfully")
-	
-	err := openFile()
-	if err != nil {
-		l.Err(err)
-	}
-}
-
-func openFile() error {
-	return log.Error(errors.New("Failed to open file"))
-}
+log.SetRequestID("req-123")
 ```
 
-### 🧾 Output (Example)
+### Get Current Request ID
 
+```go
+id := log.GetRequestID()
 ```
-INFO: 2025/10/04 08:20:13 main.go:10: [b9f9a46ebbcf4b10b4edb3d1c9a65c94] Application started successfully
-ERROR: 2025/10/04 08:20:13 openfile.go:15: [b9f9a46ebbcf4b10b4edb3d1c9a65c94] test/openfile.go:15 [b9f9a46ebbcf4b10b4edb3d1c9a65c94] Failed to open file
+
+Returns:
+
+* Assigned ID → `"req-123"`
+* If not set → `"UNKNOWN"`
+
+### Clear Request ID
+
+```go
+log.ClearRequestID()
 ```
 
 ---
 
-## ⚡ Wrapping Errors Everywhere
+## 🧩 Logging Functions
 
-You can safely wrap any returned error in your project using:
+### Info
 
 ```go
-return log.Error(err)
+log.Info(format string, args ...any)
 ```
 
-It automatically adds the file name and line number to help you **trace exactly where the error came from.**
+* Printed only when enabled
+* Output: `stdout`
 
-Example:
+---
+
+### Debug
 
 ```go
-if dbConn == nil {
-    return log.Error("database connection is nil")
-}
+log.Debug(format string, args ...any)
+```
+
+* Printed only when enabled
+* Output: `stdout`
+
+---
+
+### Error Log
+
+```go
+log.Err(err any)
+```
+
+* Always printed
+* Output: `stderr`
+* Handles wrapped errors automatically
+
+---
+
+## ⚡ Error Handling
+
+### Wrap Error
+
+```go
+err := log.Error(err)
+```
+
+### Create Error
+
+```go
+err := log.Error("message")
+```
+
+### Format Error
+
+```go
+err := log.Error(fmt.Sprintf("failed: %v", err))
 ```
 
 ---
 
-## 🧩 Advanced Example
+## 🧠 Behavior
 
-```go
-func processData(l *log.LogStruct) error {
-	data, err := os.ReadFile("missing.txt")
-	if err != nil {
-		return log.Error("read failed: %w", err)
-	}
-	l.Info("Processing data:", string(data))
-	return nil
-}
+### Error Wrapping
 
-func main() {
-	l := log.Init()
-	if err := processData(l); err != nil {
-		l.Err(err)
-	}
-}
+* Adds:
+
+  * File name
+  * Line number
+* Prevents double wrapping
+
+---
+
+### Request ID Binding
+
+* Stored per goroutine using internal map
+* Automatically included in logs
+
+---
+
+## 🧾 Log Format
+
+### Info / Debug
+
+```
+INFO: 2026/03/24 file.go:10: [ReqID: req-123] message
+DEBUG: 2026/03/24 file.go:10: [ReqID: req-123] message
 ```
 
-### Output:
+### Error (wrapped)
 
 ```
-ERROR: 2025/10/04 08:31:52 process.go:12: [9d51aa4d40c7444f8b2f0b197b04c229] test/process.go:12 [9d51aa4d40c7444f8b2f0b197b04c229] read failed: open missing.txt: no such file or directory
+ERROR: file.go:25 [ReqID: req-123] message
+```
+
+### Error (normal)
+
+```
+ERROR: 2026/03/24 file.go:25: [ReqID: req-123] message
 ```
 
 ---
 
-## 🧩 Summary
+## 📊 Summary
 
-| Feature                 | Description                                                  |
-| ----------------------- | ------------------------------------------------------------ |
-| **Unique ID**           | Each `Init()` call creates a session ID shown in all logs    |
-| **File Info in Errors** | Automatically shows where the error occurred                 |
-| **Env Control**         | Toggle info logs via `InfoFlog=Y`                            |
-| **Clean API**           | `l.Info()`, `l.Err()`, and `log.Error()` are all you need |
+| Function           | Description                    |
+| ------------------ | ------------------------------ |
+| `EnableInfo()`     | Enable info & debug logs       |
+| `Info()`           | Print info log                 |
+| `Debug()`          | Print debug log                |
+| `Err()`            | Print error log                |
+| `Error()`          | Wrap or create error           |
+| `SetRequestID()`   | Assign request ID to goroutine |
+| `GetRequestID()`   | Retrieve current request ID    |
+| `ClearRequestID()` | Remove request ID              |
 
----
-
-## 🧰 Best Practices
-
-✅ Always wrap your returned errors:
-
-```go
-return log.Error(err)
-```
-
-✅ Always log using the same session instance:
-
-```go
-l := log.Init()
-```
-
-✅ Disable info logs in production by setting:
-
-```bash
-export InfoFlog=N
-```
----
