@@ -7,7 +7,7 @@ A minimal, goroutine-aware logging and error wrapping package for Go.
 ## 📦 Import
 
 ```go
-import "your-module/log"
+import "github.com/saravanan611/log"
 ```
 
 ---
